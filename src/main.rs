@@ -8,6 +8,7 @@ mod stdlib;
 mod typecheck;
 mod utils;
 mod validator;
+mod desktop;
 mod routes;
 
 use axum::{Router, routing::{get, post}};
@@ -22,6 +23,8 @@ const STYLE_CSS: &str      = include_str!("../frontend/style.css");
 
 #[tokio::main]
 async fn main() {
+    desktop::install_if_first_launch();
+
     let cors = CorsLayer::new()
         .allow_origin(Any)
         .allow_methods(Any)
