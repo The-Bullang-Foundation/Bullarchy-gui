@@ -1,6 +1,6 @@
 # Bullarchy
 
-Bullarchy is the interactive toolchain for [Bullang](https://github.com/The-Bullang-Foundation/Bullang) projects. It handles project scaffolding, formatting, validation, transpilation, and editor integration.
+Bullarchy is the unified toolchain for [Bullang](https://github.com/The-Bullang-Foundation/Bullang) projects. It handles project scaffolding, formatting, validation, transpilation, package management, and editor integration — available both as a graphical interface and a command-line tool.
 
 It depends on Bullang as a library crate and can be installed independently — Bullang does not need to be installed as a binary for Bullarchy to work.
 
@@ -32,42 +32,46 @@ After installation, `bullarchy` is available from anywhere.
 bullarchy
 ```
 
-Launches the interactive prompt:
+Launches the graphical interface in your browser at `http://localhost:7474`.
+
+```bash
+bullarchy --cli
+```
+
+Launches the interactive terminal prompt:
 
 ```
 command ->
 ```
 
----
-
-### `update`
-
-Reinstall Bullarchy from the latest commit on the main branch.
-
+```bash
+bullarchy <command> [options]
 ```
-command -> update
-```
+
+Runs a command directly from the terminal and exits — no prompt, no GUI.
 
 ---
 
 ## Commands
 
+All commands are available in the GUI, the terminal REPL, and as direct arguments.
+
 ### `init`
 
 Scaffold a new Bullang project.
 
-```
-command -> init my_project
-command -> init my_project --depth 4
-command -> init my_project --lang c --lib stdio.h
-command -> init my_project --blueprint blueprint.bu
-command -> init my_project --blueprint blueprint.bu --lang go
+```bash
+bullarchy init my_project
+bullarchy init my_project --depth 4
+bullarchy init my_project --lang c --lib stdio.h
+bullarchy init my_project --blueprint blueprint.bu
+bullarchy init my_project --blueprint blueprint.bu --lang go
 ```
 
 Options:
 
 - `--depth N` — hierarchy depth from 1 (skirmish only) to 6 (full war chain). Default: 2.
-- `--lang ext` — target language (`rs`, `py`, `c`, `cpp`, `go`). Written to inventory as `#lang:`.
+- `--lang ext` — target language (`rs`, `py`, `c`, `cpp`, `go`, `java`). Written to inventory as `#lang:`.
 - `--lib header` — external library declaration. Can be repeated for multiple libraries.
 - `--blueprint file` — initialize from a `blueprint.bu` file instead of a depth value. Depth is inferred from the blueprint.
 - `--path dir` — where to create the project (default: current directory).
@@ -89,19 +93,34 @@ depth 6 → war → theater → battle → strategy → tactic → skirmish
 
 Transpile a Bullang project folder or a single `.bu` file.
 
-```
-command -> convert my_project
-command -> convert my_project -e py
-command -> convert path/to/file.bu
-command -> convert path/to/file.bu -o out.rs
+```bash
+bullarchy convert my_project
+bullarchy convert my_project -e py
+bullarchy convert path/to/file.bu
+bullarchy convert path/to/file.bu -o out.rs
 ```
 
 Options:
 
 - `-n name` — output folder name (project mode).
-- `-e ext` — target language (`rs`, `py`, `c`, `cpp`, `go`). Overrides `#lang` from inventory.
+- `-e ext` — target language (`rs`, `py`, `c`, `cpp`, `go`, `java`). Overrides `#lang` from inventory.
 - `--out dir` — explicit output path (project mode).
 - `-o file` — output file (single-file mode; omit to write to stdout).
+
+---
+
+### `add`
+
+Browse and install Bullang packages from the registry.
+
+```bash
+bullarchy add                        # list all available packages
+bullarchy add netlib                 # install latest version
+bullarchy add netlib@v1.2.0          # install a specific version
+bullarchy add https://github.com/... # install directly from a git URL
+```
+
+Packages are installed globally to `~/.bull/packages/` and are available to any Bullang project. To use a package, add `#lib: <name>;` to your project's `inventory.bu`.
 
 ---
 
@@ -109,10 +128,10 @@ Options:
 
 Format all `.bu` files in the project to canonical style. Rewrites files in place. Escape block contents are never modified.
 
-```
-command -> fmt
-command -> fmt my_project
-command -> fmt --dry-run
+```bash
+bullarchy fmt
+bullarchy fmt my_project
+bullarchy fmt --dry-run
 ```
 
 - With no argument, formats from the current directory.
@@ -124,8 +143,8 @@ command -> fmt --dry-run
 
 Validate and type-check the project from the current directory. Also reports any files not in canonical format — run `fmt` to fix.
 
-```
-command -> check
+```bash
+bullarchy check
 ```
 
 Runs three passes in order:
@@ -134,16 +153,14 @@ Runs three passes in order:
 2. Type checking
 3. Format drift check
 
-Exits with a clear report on the first failing pass.
-
 ---
 
 ### `editor-setup`
 
 Write LSP configuration files for detected editors.
 
-```
-command -> editor-setup
+```bash
+bullarchy editor-setup
 ```
 
 Supports: Neovim (nvim-lspconfig), Helix, Emacs (eglot).
@@ -153,40 +170,32 @@ The LSP server is built into Bullarchy and started directly by editors via `bull
 
 ---
 
-### `help`
+### `update`
 
-Print the list of available commands.
+Reinstall Bullarchy from the latest commit on the main branch.
 
-```
-command -> help
+```bash
+bullarchy update
 ```
 
 ---
 
-### `exit`
+### `help`
 
-Quit Bullarchy.
+Print the list of available commands.
 
-```
-command -> exit
+```bash
+bullarchy help
 ```
 
 ---
 
 ## LSP server
 
-Bullarchy includes the Bullang language server. Editors invoke it directly — it bypasses the interactive prompt:
+Bullarchy includes the Bullang language server. Editors invoke it directly:
 
 ```bash
 bullarchy lsp
 ```
 
 Capabilities: diagnostics, hover (function signatures), go-to-definition. Run `editor-setup` to have Bullarchy write the configuration for your editor automatically.
-
----
-
-## Relationship to Bullang and Bullscript
-
-**[Bullang](https://github.com/The-Bullang-Foundation/Bullang)** is the language definition — grammar, AST, parser, formatter, and stdlib catalogue. Bullarchy depends on it as a library crate. Run `bullang stdlib` to browse available builtins.
-
-**[Bullscript](https://github.com/The-Bullang-Foundation/Bullscript)** is the interactive writing and testing tool. It does not transpile — that is Bullarchy's role. The two tools are designed to be used together: write and test with Bullscript, transpile and integrate with Bullarchy.
