@@ -40,6 +40,7 @@ async fn main() {
         .route("/api/check",   post(routes::handle_check))
         .route("/api/editor-setup", post(routes::handle_editor_setup))
         .route("/api/update",  post(routes::handle_update))
+        .route("/api/add",     post(routes::handle_add))
         .route("/api/blueprint/save", post(routes::handle_blueprint_save))
         .layer(cors);
 

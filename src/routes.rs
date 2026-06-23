@@ -162,6 +162,36 @@ pub async fn handle_update() -> impl IntoResponse {
     ok(output)
 }
 
+// ── /api/add ──────────────────────────────────────────────────────────────────
+
+#[derive(Deserialize)]
+pub struct AddRequest {
+    pub source: String,
+}
+
+pub async fn handle_add(Json(req): Json<AddRequest>) -> impl IntoResponse {
+    let source = req.source.trim().to_string();
+    let output = tokio::task::spawn_blocking(move || {
+        capture(move || {
+            let args: Vec<&str> = if source.is_empty() {
+                vec![]
+            } else {
+                vec![source.as_str()]
+            };
+            // Leak source into 'static for the closure — safe because capture()
+            // waits for the closure to finish before returning.
+            let args_static: Vec<&'static str> = args
+                .into_iter()
+                .map(|s| Box::leak(s.to_string().into_boxed_str()) as &'static str)
+                .collect();
+            crate::cmd::cmd_add(&args_static);
+        })
+    })
+    .await
+    .unwrap_or_default();
+    ok(output)
+}
+
 // ── /api/blueprint/save ───────────────────────────────────────────────────────
 
 #[derive(Deserialize)]

@@ -115,6 +115,7 @@ const PANELS = {
   convert:   buildConvertPanel,
   blueprint: buildBlueprintPanel,
   control:   buildControlPanel,
+  add:       buildAddPanel,
   options:   buildOptionsPanel,
 };
 
@@ -496,6 +497,59 @@ function buildFmtSubPanel() {
 }
 
 // ── options panel (editor-setup + update) ─────────────────────────────────────
+
+// ── add panel ─────────────────────────────────────────────────────────────────
+
+function buildAddPanel() {
+  const body = document.createDocumentFragment();
+
+  // ── Package list section ──────────────────────────────────────────────────
+  const listBanner = infoBanner(
+    'Browse packages from the Bullarchy registry, or install directly from a git URL. ' +
+    'Packages are installed globally to ~/.bull/packages/ and can be used in any Bullang project.'
+  );
+  body.appendChild(listBanner);
+
+  // Install by name or URL
+  const sourceRow = document.createElement('div');
+  sourceRow.className = 'field-row';
+
+  const sourceIn = document.createElement('input');
+  sourceIn.type        = 'text';
+  sourceIn.placeholder = 'package name, name@version, or https://...';
+  sourceIn.className   = 'text-input';
+
+  sourceRow.appendChild(field('Package', sourceIn));
+  body.appendChild(sourceRow);
+
+  const installBtn = runButton('Install');
+  const { wrap: installWrap, pre: installPre } = consoleEl();
+  body.appendChild(installBtn);
+  body.appendChild(installWrap);
+
+  installBtn.addEventListener('click', () => {
+    const source = sourceIn.value.trim();
+    runCmd('/api/add', { source }, installBtn, installPre);
+  });
+
+  // Browse registry
+  const divider = document.createElement('div');
+  divider.className = 'nav-divider';
+  divider.style.margin = '1.2rem 0';
+  body.appendChild(divider);
+
+  const browseBtn = runButton('Browse registry');
+  browseBtn.style.background = 'var(--surface)';
+  const { wrap: browseWrap, pre: browsePre } = consoleEl();
+  body.appendChild(browseBtn);
+  body.appendChild(browseWrap);
+
+  browseBtn.addEventListener('click', () => {
+    runCmd('/api/add', { source: '' }, browseBtn, browsePre);
+  });
+
+  return makePanel('add — package manager', '📦', body);
+}
 
 function buildOptionsPanel() {
   const body = document.createDocumentFragment();
