@@ -19,19 +19,8 @@ pub fn emit(params: &[Param], backend: &Backend) -> Result<String, String> {
         // Wraps the raw fd in a BufReader; reads one line; strips the newline.
         // The fd is NOT closed here — ownership stays with the caller.
         Backend::Rust => format!(
-            "{{\
-               use std::io::{{BufRead, BufReader}};\
-               use std::os::unix::io::FromRawFd;\
-               let __fd = {fd};\
-               let __f  = unsafe {{ std::fs::File::from_raw_fd(__fd) }};\
-               let mut __r   = BufReader::new(&__f);\
-               let mut __line = String::new();\
-               let _ = __r.read_line(&mut __line);\
-               std::mem::forget(__f);\
-               __line.trim_end_matches('\\n').trim_end_matches('\\r').to_owned()\
-             }}"
+            "{{               let mut __line = String::new();               if cfg!(unix) {{                 use std::io::{{BufRead, BufReader}};                 use std::os::unix::io::FromRawFd;                 let __f = unsafe {{ std::fs::File::from_raw_fd({fd}) }};                 let mut __r = BufReader::new(&__f);                 let _ = __r.read_line(&mut __line);                 std::mem::forget(__f);               }} else {{                 use std::io::BufRead;                 let _ = std::io::stdin().lock().read_line(&mut __line);               }}               __line.trim_end_matches('\\n').trim_end_matches('\\r').to_owned()             }}"
         ),
-
         // ── Python ───────────────────────────────────────────────────────────
         // os.read reads raw bytes; decode to str; strip trailing newline.
         Backend::Python => {
@@ -58,39 +47,47 @@ pub fn emit(params: &[Param], backend: &Backend) -> Result<String, String> {
         }
 
         // ── C ────────────────────────────────────────────────────────────────
-        // read(2) byte-by-byte into a local buffer until '\\n' or EOF.
-        // Returns a heap-allocated char* (caller owns it).
+        // read(2) on Unix, _read() on Windows — byte-by-byte into a buffer.
         Backend::C => format!(
-            "({{ \
-               char *__buf = (char *)malloc(4096); \
-               size_t __i = 0; \
-               char __ch; \
-               ssize_t __n; \
-               while (__i < 4095 && (__n = read({fd}, &__ch, 1)) > 0) {{ \
-                 if (__ch == '\\n') break; \
-                 __buf[__i++] = __ch; \
-               }} \
-               if (__i > 0 && __buf[__i-1] == '\\r') __i--; \
-               __buf[__i] = '\\0'; \
-               __buf; \
+            "({{ \\
+               char *__buf = (char *)malloc(4096); \\
+               size_t __i = 0; \\
+               char __ch; \\
+               int __n; \\
+               while (__i < 4095) {{ \\
+                 #ifdef _WIN32 \\
+                 __n = _read({fd}, &__ch, 1); \\
+                 #else \\
+                 __n = (int)read({fd}, &__ch, 1); \\
+                 #endif \\
+                 if (__n <= 0 || __ch == '\\\\n') break; \\
+                 __buf[__i++] = __ch; \\
+               }} \\
+               if (__i > 0 && __buf[__i-1] == '\\\\r') __i--; \\
+               __buf[__i] = '\\\\0'; \\
+               __buf; \\
              }})"
         ),
-
         // ── C++ ──────────────────────────────────────────────────────────────
-        // IIFE wrapping the same byte-by-byte read; returns std::string.
+        // IIFE wrapping byte-by-byte read; uses _read on Windows.
         Backend::Cpp => format!(
-            "[&]() -> std::string {{ \
-               std::string __s; \
-               char __ch; \
-               while (read({fd}, &__ch, 1) > 0) {{ \
-                 if (__ch == '\\n') break; \
-                 __s += __ch; \
-               }} \
-               if (!__s.empty() && __s.back() == '\\r') __s.pop_back(); \
-               return __s; \
+            "[&]() -> std::string {{ \\
+               std::string __s; \\
+               char __ch; \\
+               int __n; \\
+               while (true) {{ \\
+                 #ifdef _WIN32 \\
+                 __n = _read({fd}, &__ch, 1); \\
+                 #else \\
+                 __n = (int)read({fd}, &__ch, 1); \\
+                 #endif \\
+                 if (__n <= 0 || __ch == '\\\\n') break; \\
+                 __s += __ch; \\
+               }} \\
+               if (!__s.empty() && __s.back() == '\\\\r') __s.pop_back(); \\
+               return __s; \\
              }}()"
         ),
-
         // ── Go ───────────────────────────────────────────────────────────────
         // Wraps the raw fd in an os.File (without taking ownership via
         // runtime.SetFinalizer) then reads one line through a bufio.Reader.

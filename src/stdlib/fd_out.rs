@@ -18,18 +18,8 @@ pub fn emit(params: &[Param], backend: &Backend) -> Result<String, String> {
         // Wraps the raw fd in a ManuallyDrop<File> so we can write without
         // the File destructor closing the fd on drop.
         Backend::Rust => format!(
-            "{{\
-               use std::io::Write;\
-               use std::os::unix::io::FromRawFd;\
-               use std::mem::ManuallyDrop;\
-               let mut __f = ManuallyDrop::new(unsafe {{ \
-                 std::fs::File::from_raw_fd({fd}) \
-               }});\
-               let __bytes = {content}.as_bytes();\
-               __f.write_all(__bytes).map(|_| __bytes.len() as i32).unwrap_or(-1)\
-             }}"
+            "{{               use std::io::Write;               let __bytes = {content}.as_bytes();               let __n = if cfg!(unix) {{                 use std::os::unix::io::FromRawFd;                 use std::mem::ManuallyDrop;                 let mut __f = ManuallyDrop::new(unsafe {{ std::fs::File::from_raw_fd({fd}) }});                 __f.write_all(__bytes).map(|_| __bytes.len() as i32).unwrap_or(-1)               }} else {{                 std::io::stdout().write_all(__bytes).map(|_| __bytes.len() as i32).unwrap_or(-1)               }};               __n             }}"
         ),
-
         // ── Python ───────────────────────────────────────────────────────────
         // os.write returns bytes written directly.
         Backend::Python => {
@@ -43,16 +33,29 @@ pub fn emit(params: &[Param], backend: &Backend) -> Result<String, String> {
         }
 
         // ── C ────────────────────────────────────────────────────────────────
-        // write(2); returns ssize_t cast to int32_t.
+        // write(2) on Unix, _write() on Windows.
         Backend::C => format!(
-            "(int32_t)write({fd}, {content}, strlen({content}))"
+            "({{ \\
+               #ifdef _WIN32 \\
+               (int32_t)_write({fd}, {content}, (unsigned int)strlen({content})); \\
+               #else \\
+               (int32_t)write({fd}, {content}, strlen({content})); \\
+               #endif \\
+             }})",
+            fd = fd, content = content
         ),
-
         // ── C++ ──────────────────────────────────────────────────────────────
+        // write(2) on Unix, _write() on Windows.
         Backend::Cpp => format!(
-            "static_cast<int32_t>(write({fd}, {content}.c_str(), {content}.size()))"
+            "[&]() -> int32_t {{ \\
+               #ifdef _WIN32 \\
+               return static_cast<int32_t>(_write({fd}, {content}.c_str(), (unsigned int){content}.size())); \\
+               #else \\
+               return static_cast<int32_t>(write({fd}, {content}.c_str(), {content}.size())); \\
+               #endif \\
+             }}()",
+            fd = fd, content = content
         ),
-
         // ── Go ───────────────────────────────────────────────────────────────
         // syscall.Write returns (n int, err error).
         Backend::Go => format!(

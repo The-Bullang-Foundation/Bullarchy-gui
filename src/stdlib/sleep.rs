@@ -27,7 +27,10 @@ pub fn emit(params: &[Param], backend: &Backend) -> Result<String, String> {
         // ── C ────────────────────────────────────────────────────────────────
         // usleep takes microseconds; requires <unistd.h>.
         // Cast to useconds_t (unsigned int) — safe for sane sleep durations.
-        Backend::C => format!("usleep((useconds_t)(({}) * 1000))", ms),
+        Backend::C => format!(
+            "#ifdef _WIN32\n             Sleep((DWORD)({ms}));\n             #else\n             usleep((useconds_t)(({ms}) * 1000));\n             #endif",
+            ms = ms
+        ),
 
         // ── C++ ──────────────────────────────────────────────────────────────
         // std::this_thread::sleep_for requires <thread> and <chrono>.

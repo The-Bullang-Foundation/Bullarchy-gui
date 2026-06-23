@@ -22,21 +22,8 @@ pub fn emit(params: &[Param], backend: &Backend) -> Result<String, String> {
         // Uses std::fs::OpenOptions to build the right flags, then converts to
         // a raw fd via IntoRawFd.  Returns -1 on any error.
         Backend::Rust => format!(
-            "{{\
-               use std::os::unix::io::IntoRawFd;\
-               let __mode: &str = {mode}.as_str();\
-               let mut __oo = std::fs::OpenOptions::new();\
-               match __mode {{\
-                 \"r\"  => {{ __oo.read(true); }}\
-                 \"w\"  => {{ __oo.write(true).create(true).truncate(true); }}\
-                 \"a\"  => {{ __oo.append(true).create(true); }}\
-                 \"rw\" => {{ __oo.read(true).write(true).create(true); }}\
-                 _     => {{ __oo.read(true); }}\
-               }}\
-               __oo.open({path}.as_str()).map(|f| f.into_raw_fd()).unwrap_or(-1)\
-             }}"
+            "{{               let mut __oo = std::fs::OpenOptions::new();               match {mode}.as_str() {{                 \"r\"  => {{ __oo.read(true); }}                 \"w\"  => {{ __oo.write(true).create(true).truncate(true); }}                 \"a\"  => {{ __oo.append(true).create(true); }}                 \"rw\" => {{ __oo.read(true).write(true).create(true); }}                 _     => {{ __oo.read(true); }}               }}               if cfg!(unix) {{                 use std::os::unix::io::IntoRawFd;                 __oo.open({path}.as_str()).map(|f| f.into_raw_fd()).unwrap_or(-1)               }} else {{                 use std::os::windows::io::IntoRawHandle;                 __oo.open({path}.as_str()).map(|f| f.into_raw_handle() as i32).unwrap_or(-1)               }}             }}"
         ),
-
         // ── Python ───────────────────────────────────────────────────────────
         // os.open returns an integer fd directly.  Mode string → O_* flags.
         Backend::Python => {
@@ -57,33 +44,55 @@ pub fn emit(params: &[Param], backend: &Backend) -> Result<String, String> {
         }
 
         // ── C ────────────────────────────────────────────────────────────────
-        // POSIX open(2). Requires <fcntl.h> and <sys/stat.h>.
+        // POSIX open(2) on Unix; _open() with _O_* flags on Windows.
         Backend::C => format!(
-            "({{ \
-               int __flags; \
-               if      (strcmp({mode}, \"r\" ) == 0) __flags = O_RDONLY; \
-               else if (strcmp({mode}, \"w\" ) == 0) __flags = O_WRONLY | O_CREAT | O_TRUNC; \
-               else if (strcmp({mode}, \"a\" ) == 0) __flags = O_WRONLY | O_CREAT | O_APPEND; \
-               else if (strcmp({mode}, \"rw\") == 0) __flags = O_RDWR  | O_CREAT; \
-               else                                  __flags = O_RDONLY; \
-               (int32_t)open({path}, __flags, 0644); \
-             }})"
+            "({{ \\
+               int __fd; \\
+               #ifdef _WIN32 \\
+               int __flags; \\
+               if      (strcmp({mode}, \"r\" ) == 0) __flags = _O_RDONLY | _O_BINARY; \\
+               else if (strcmp({mode}, \"w\" ) == 0) __flags = _O_WRONLY | _O_CREAT | _O_TRUNC  | _O_BINARY; \\
+               else if (strcmp({mode}, \"a\" ) == 0) __flags = _O_WRONLY | _O_CREAT | _O_APPEND | _O_BINARY; \\
+               else if (strcmp({mode}, \"rw\") == 0) __flags = _O_RDWR  | _O_CREAT | _O_BINARY; \\
+               else                                  __flags = _O_RDONLY | _O_BINARY; \\
+               __fd = _open({path}, __flags, _S_IREAD | _S_IWRITE); \\
+               #else \\
+               int __flags; \\
+               if      (strcmp({mode}, \"r\" ) == 0) __flags = O_RDONLY; \\
+               else if (strcmp({mode}, \"w\" ) == 0) __flags = O_WRONLY | O_CREAT | O_TRUNC; \\
+               else if (strcmp({mode}, \"a\" ) == 0) __flags = O_WRONLY | O_CREAT | O_APPEND; \\
+               else if (strcmp({mode}, \"rw\") == 0) __flags = O_RDWR  | O_CREAT; \\
+               else                                  __flags = O_RDONLY; \\
+               __fd = open({path}, __flags, 0644); \\
+               #endif \\
+               (int32_t)__fd; \\
+             }})",
+            path = path, mode = mode
         ),
-
         // ── C++ ──────────────────────────────────────────────────────────────
-        // Same POSIX open(2), wrapped in an immediately-invoked lambda.
+        // Same conditional logic wrapped in a lambda.
         Backend::Cpp => format!(
-            "[&]() -> int32_t {{ \
-               int __flags; \
-               if      ({mode} == \"r\" ) __flags = O_RDONLY; \
-               else if ({mode} == \"w\" ) __flags = O_WRONLY | O_CREAT | O_TRUNC; \
-               else if ({mode} == \"a\" ) __flags = O_WRONLY | O_CREAT | O_APPEND; \
-               else if ({mode} == \"rw\") __flags = O_RDWR  | O_CREAT; \
-               else                      __flags = O_RDONLY; \
-               return static_cast<int32_t>(open({path}.c_str(), __flags, 0644)); \
-             }}()"
+            "[&]() -> int32_t {{ \\
+               #ifdef _WIN32 \\
+               int __flags; \\
+               if      ({mode} == \"r\" ) __flags = _O_RDONLY | _O_BINARY; \\
+               else if ({mode} == \"w\" ) __flags = _O_WRONLY | _O_CREAT | _O_TRUNC  | _O_BINARY; \\
+               else if ({mode} == \"a\" ) __flags = _O_WRONLY | _O_CREAT | _O_APPEND | _O_BINARY; \\
+               else if ({mode} == \"rw\") __flags = _O_RDWR  | _O_CREAT | _O_BINARY; \\
+               else                       __flags = _O_RDONLY | _O_BINARY; \\
+               return static_cast<int32_t>(_open({path}.c_str(), __flags, _S_IREAD | _S_IWRITE)); \\
+               #else \\
+               int __flags; \\
+               if      ({mode} == \"r\" ) __flags = O_RDONLY; \\
+               else if ({mode} == \"w\" ) __flags = O_WRONLY | O_CREAT | O_TRUNC; \\
+               else if ({mode} == \"a\" ) __flags = O_WRONLY | O_CREAT | O_APPEND; \\
+               else if ({mode} == \"rw\") __flags = O_RDWR  | O_CREAT; \\
+               else                       __flags = O_RDONLY; \\
+               return static_cast<int32_t>(open({path}.c_str(), __flags, 0644)); \\
+               #endif \\
+             }}()",
+            path = path, mode = mode
         ),
-
         // ── Go ───────────────────────────────────────────────────────────────
         // os.OpenFile; returns the raw fd as i32, or -1 on error.
         Backend::Go => format!(

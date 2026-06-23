@@ -17,12 +17,8 @@ pub fn emit(params: &[Param], backend: &Backend) -> Result<String, String> {
         // std::fs::File::drop does not surface the error; this matches
         // the common usage pattern of close in C.
         Backend::Rust => format!(
-            "{{\
-               unsafe {{ drop(std::fs::File::from_raw_fd({fd})) }};\
-               0i32\
-             }}"
+            "{{               if cfg!(unix) {{                 use std::os::unix::io::FromRawFd;                 unsafe {{ drop(std::fs::File::from_raw_fd({fd})) }};               }}               0i32             }}"
         ),
-
         // ── Python ───────────────────────────────────────────────────────────
         // os.close returns None; normalise to 0 / -1.
         Backend::Python => {

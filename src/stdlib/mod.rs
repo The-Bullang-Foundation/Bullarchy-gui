@@ -37,6 +37,7 @@ mod powf;
 mod quick_sort;
 mod radix_sort;
 mod replace_str;
+mod run;
 mod sleep;
 mod sqrt;
 mod starts_with;
@@ -88,6 +89,7 @@ pub const BUILTINS: &[(&str, &str, &str)] = &[
     time::META,
     // system
     args::META,
+    run::META,
     exit::META,
     env::META,
     sleep::META,
@@ -142,6 +144,7 @@ pub fn emit_builtin(name: &str, params: &[Param], backend: &Backend) -> Result<S
         "exit"           => exit::emit(params, backend),
         "env"            => env::emit(params, backend),
         "sleep"          => sleep::emit(params, backend),
+        "run"            => run::emit(params, backend),
         _             => unreachable!(),
     }
 }
