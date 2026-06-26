@@ -67,7 +67,6 @@ fn list_packages() {
 
     for (name, meta) in packages {
         let description = meta["description"].as_str().unwrap_or("No description.");
-        let version     = meta["version"].as_str().unwrap_or("?");
         println!(
             "    {:<width$}  {}",
             name, description,
